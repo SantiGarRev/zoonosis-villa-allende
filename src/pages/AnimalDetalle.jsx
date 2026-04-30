@@ -10,7 +10,7 @@ import { es } from 'date-fns/locale'
 import {
   ArrowLeft, Edit, Syringe, Bug, FlaskConical, Stethoscope,
   DollarSign, BarChart3, Plus, Trash2, AlertCircle, CheckCircle,
-  Weight, Calendar, Hash, PawPrint, ClipboardList, TrendingUp
+  Weight, Calendar, Hash, PawPrint, ClipboardList, TrendingUp, Heart, Printer
 } from 'lucide-react'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -22,9 +22,23 @@ const TABS = [
   { id: 'sanitario',     label: 'Sanitario',     icon: Syringe },
   { id: 'estudios',      label: 'Estudios',      icon: FlaskConical },
   { id: 'intervenciones',label: 'Intervenciones',icon: Stethoscope },
+  { id: 'adopcion',      label: 'Adopción',      icon: Heart },
   { id: 'economico',     label: 'Económico',     icon: DollarSign },
   { id: 'estadisticas',  label: 'Estadísticas',  icon: BarChart3 },
 ]
+
+const LOCATION_LABELS = {
+  refugio: 'Refugio canino',
+  hogar_definitivo: 'Hogar definitivo',
+  bionodo: 'Bionodo',
+  provisorio: 'Provisorio',
+}
+const STATUS_LABELS = {
+  vivo: 'Vivo',
+  fallecido: 'Fallecido',
+  extraviado: 'Extraviado',
+  recuperado: 'Recuperado por dueños',
+}
 
 const STUDY_TYPES = [
   'Análisis de sangre', 'Biopsia', 'Radiografía', 'Ecografía',
@@ -174,10 +188,13 @@ export default function AnimalDetalle() {
   const [weights, setWeights] = useState([])
 
   // Modals
-  const [modal, setModal] = useState(null) // 'vacuna'|'desparasitacion'|'estudio'|'intervencion'|'peso'|'editAnimal'
+  const [modal, setModal] = useState(null)
+  const [adoptions, setAdoptions] = useState([])
+  const [adoptionForm, setAdoptionForm] = useState({ adopter_name: '', adopter_address: '', adopter_phone: '', adoption_date: new Date().toISOString().split('T')[0], notes: '' })
+  const [savingAdoption, setSavingAdoption] = useState(false)
 
   const loadAll = useCallback(async () => {
-    const [animalRes, vacRes, dewRes, studRes, intRes, remRes, weightRes] = await Promise.all([
+    const [animalRes, vacRes, dewRes, studRes, intRes, remRes, weightRes, adoptRes] = await Promise.all([
       supabase.from('animals').select('*').eq('id', id).single(),
       supabase.from('vaccinations').select('*').eq('animal_id', id).order('date_applied', { ascending: false }),
       supabase.from('dewormings').select('*').eq('animal_id', id).order('date_applied', { ascending: false }),
@@ -185,6 +202,7 @@ export default function AnimalDetalle() {
       supabase.from('interventions').select('*').eq('animal_id', id).order('date', { ascending: false }),
       supabase.from('reminders').select('*').eq('animal_id', id).order('due_date', { ascending: true }),
       supabase.from('weight_records').select('*').eq('animal_id', id).order('date', { ascending: true }),
+      supabase.from('adoptions').select('*').eq('animal_id', id).order('adoption_date', { ascending: false }),
     ])
     setAnimal(animalRes.data)
     setVaccinations(vacRes.data || [])
@@ -193,8 +211,141 @@ export default function AnimalDetalle() {
     setInterventions(intRes.data || [])
     setReminders(remRes.data || [])
     setWeights(weightRes.data || [])
+    setAdoptions(adoptRes.data || [])
     setLoading(false)
   }, [id])
+
+  async function saveAdoption(e) {
+    e.preventDefault()
+    setSavingAdoption(true)
+    await supabase.from('adoptions').insert([{ animal_id: id, ...adoptionForm, created_by: user.id }])
+    await supabase.from('animals').update({ location: 'hogar_definitivo', animal_status: 'vivo' }).eq('id', id)
+    setModal(null)
+    loadAll()
+    setSavingAdoption(false)
+  }
+
+  function generatePDF() {
+    const a = animal
+    const fmtD = d => d ? format(parseISO(d), 'dd/MM/yyyy') : '—'
+    const fmtM = n => n != null ? `$${Number(n).toLocaleString('es-AR')}` : '—'
+    const totalGasto = [...vaccinations, ...dewormings, ...studies, ...interventions].reduce((s, r) => s + (r.cost || 0), 0)
+    const lastAdoption = adoptions[0]
+
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    <title>Ficha Médica - ${a.name}</title>
+    <style>
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { font-family: Arial, sans-serif; font-size: 12px; color: #1a1a1a; background: white; }
+      .header { background: #1a3a2a; color: white; padding: 24px 32px; display: flex; justify-content: space-between; align-items: center; }
+      .header h1 { font-size: 22px; font-weight: 700; }
+      .header p { font-size: 11px; opacity: 0.8; margin-top: 4px; }
+      .logo { font-size: 32px; }
+      .body { padding: 24px 32px; }
+      .section { margin-bottom: 20px; }
+      .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #666; border-bottom: 1px solid #eee; padding-bottom: 6px; margin-bottom: 10px; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; }
+      .field { margin-bottom: 4px; }
+      .field-label { font-size: 10px; color: #888; }
+      .field-value { font-size: 12px; font-weight: 500; }
+      table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+      th { background: #f5f5f0; text-align: left; padding: 6px 8px; font-size: 10px; text-transform: uppercase; color: #666; border: 1px solid #e0e0e0; }
+      td { padding: 6px 8px; border: 1px solid #e8e8e0; font-size: 11px; }
+      tr:nth-child(even) td { background: #fafafa; }
+      .adopcion-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px; }
+      .total-box { background: #1a3a2a; color: white; padding: 12px 16px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+      .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #eee; font-size: 10px; color: #aaa; display: flex; justify-content: space-between; }
+      @media print { @page { margin: 1cm; } }
+    </style></head><body>
+    <div class="header">
+      <div>
+        <h1>Ficha Médica — ${a.name}</h1>
+        <p>Municipalidad de Villa Allende · Zoonosis · Generado el ${format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
+      </div>
+      <div class="logo">🐾</div>
+    </div>
+    <div class="body">
+      <div class="section">
+        <div class="section-title">Datos del animal</div>
+        <div class="grid">
+          ${a.recognition_number ? `<div class="field"><div class="field-label">N° Reconocimiento</div><div class="field-value">${a.recognition_number}</div></div>` : ''}
+          <div class="field"><div class="field-label">Nombre</div><div class="field-value">${a.name}</div></div>
+          <div class="field"><div class="field-label">Especie</div><div class="field-value capitalize">${a.species}</div></div>
+          <div class="field"><div class="field-label">Sexo</div><div class="field-value capitalize">${a.sex}</div></div>
+          <div class="field"><div class="field-label">Raza</div><div class="field-value">${a.breed || '—'}</div></div>
+          ${a.coat ? `<div class="field"><div class="field-label">Pelaje</div><div class="field-value">${a.coat}</div></div>` : ''}
+          <div class="field"><div class="field-label">Edad estimada</div><div class="field-value">${a.estimated_age_years ? a.estimated_age_years + ' años' : fmtD(a.birth_date)}</div></div>
+          <div class="field"><div class="field-label">Peso actual</div><div class="field-value">${a.current_weight_kg ? a.current_weight_kg + ' kg' : '—'}</div></div>
+          <div class="field"><div class="field-label">Castrado/a</div><div class="field-value">${a.is_neutered ? 'Sí (' + fmtD(a.neutering_date) + ')' : 'No'}</div></div>
+          ${a.chip_number ? `<div class="field"><div class="field-label">N° Chip</div><div class="field-value">${a.chip_number}</div></div>` : ''}
+          ${a.tattoo_number ? `<div class="field"><div class="field-label">N° Tatuaje</div><div class="field-value">${a.tattoo_number}</div></div>` : ''}
+          <div class="field"><div class="field-label">Fecha ingreso</div><div class="field-value">${fmtD(a.entry_date)}</div></div>
+          <div class="field"><div class="field-label">Estado</div><div class="field-value">${STATUS_LABELS[a.animal_status] || a.animal_status || '—'}</div></div>
+          <div class="field"><div class="field-label">Lugar</div><div class="field-value">${LOCATION_LABELS[a.location] || a.location || '—'}</div></div>
+        </div>
+        ${a.notes ? `<div style="margin-top:10px;padding:8px;background:#f9f9f7;border-radius:4px;font-size:11px;"><strong>Notas:</strong> ${a.notes}</div>` : ''}
+      </div>
+
+      ${lastAdoption ? `<div class="section">
+        <div class="section-title">Datos de adopción</div>
+        <div class="adopcion-box">
+          <div class="grid">
+            <div class="field"><div class="field-label">Adoptante</div><div class="field-value">${lastAdoption.adopter_name}</div></div>
+            <div class="field"><div class="field-label">Fecha</div><div class="field-value">${fmtD(lastAdoption.adoption_date)}</div></div>
+            ${lastAdoption.adopter_address ? `<div class="field"><div class="field-label">Dirección</div><div class="field-value">${lastAdoption.adopter_address}</div></div>` : ''}
+            ${lastAdoption.adopter_phone ? `<div class="field"><div class="field-label">Teléfono</div><div class="field-value">${lastAdoption.adopter_phone}</div></div>` : ''}
+          </div>
+          ${lastAdoption.notes ? `<div style="margin-top:8px;font-size:11px;"><strong>Notas:</strong> ${lastAdoption.notes}</div>` : ''}
+        </div>
+      </div>` : ''}
+
+      ${vaccinations.length > 0 ? `<div class="section">
+        <div class="section-title">Vacunaciones (${vaccinations.length})</div>
+        <table><thead><tr><th>Vacuna</th><th>Fecha aplicación</th><th>Próxima dosis</th><th>Laboratorio</th><th>Costo</th></tr></thead>
+        <tbody>${vaccinations.map(v => `<tr><td>${v.vaccine_name}</td><td>${fmtD(v.date_applied)}</td><td>${fmtD(v.next_due_date)}</td><td>${v.laboratory || '—'}</td><td>${fmtM(v.cost)}</td></tr>`).join('')}</tbody></table>
+      </div>` : ''}
+
+      ${dewormings.length > 0 ? `<div class="section">
+        <div class="section-title">Desparasitaciones (${dewormings.length})</div>
+        <table><thead><tr><th>Producto</th><th>Tipo</th><th>Fecha</th><th>Próxima</th><th>Costo</th></tr></thead>
+        <tbody>${dewormings.map(d => `<tr><td>${d.product_name}</td><td>${d.type}</td><td>${fmtD(d.date_applied)}</td><td>${fmtD(d.next_due_date)}</td><td>${fmtM(d.cost)}</td></tr>`).join('')}</tbody></table>
+      </div>` : ''}
+
+      ${interventions.length > 0 ? `<div class="section">
+        <div class="section-title">Historia clínica — Intervenciones (${interventions.length})</div>
+        <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Título</th><th>Diagnóstico</th><th>Tratamiento</th><th>Costo</th></tr></thead>
+        <tbody>${interventions.map(i => `<tr><td>${fmtD(i.date)}</td><td>${i.type}</td><td>${i.title}</td><td>${i.diagnosis || '—'}</td><td>${i.treatment || '—'}</td><td>${fmtM(i.cost)}</td></tr>`).join('')}</tbody></table>
+      </div>` : ''}
+
+      ${studies.length > 0 ? `<div class="section">
+        <div class="section-title">Estudios médicos (${studies.length})</div>
+        <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Título</th><th>Resultado</th><th>Costo</th></tr></thead>
+        <tbody>${studies.map(s => `<tr><td>${fmtD(s.date)}</td><td>${s.study_type}</td><td>${s.title}</td><td>${s.result || '—'}</td><td>${fmtM(s.cost)}</td></tr>`).join('')}</tbody></table>
+      </div>` : ''}
+
+      ${weights.length > 0 ? `<div class="section">
+        <div class="section-title">Registro de peso</div>
+        <table><thead><tr><th>Fecha</th><th>Peso</th><th>Notas</th></tr></thead>
+        <tbody>${weights.map(w => `<tr><td>${fmtD(w.date)}</td><td>${w.weight_kg} kg</td><td>${w.notes || '—'}</td></tr>`).join('')}</tbody></table>
+      </div>` : ''}
+
+      <div class="total-box">
+        <span style="font-weight:700;">Gasto total acumulado</span>
+        <span style="font-size:16px;font-weight:700;">${fmtM(totalGasto)}</span>
+      </div>
+
+      <div class="footer">
+        <span>Sistema Zoonosis · Municipalidad de Villa Allende</span>
+        <span>${format(new Date(), 'dd/MM/yyyy HH:mm')}</span>
+      </div>
+    </div>
+    <script>window.onload = () => window.print()</script>
+    </body></html>`
+
+    const win = window.open('', '_blank')
+    win.document.write(html)
+    win.document.close()
+  }
 
   useEffect(() => { loadAll() }, [loadAll])
 
@@ -320,16 +471,28 @@ export default function AnimalDetalle() {
         <div className="flex-1">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold text-gray-900">{animal.name}</h1>
+            {animal.recognition_number && <span className="badge-gray font-mono">{animal.recognition_number}</span>}
             <span className="badge-gray capitalize">{animal.species}</span>
             <span className="badge-gray capitalize">{animal.sex}</span>
             {animal.is_neutered && <span className="badge-green">Castrado/a</span>}
+            {animal.animal_status === 'fallecido' && <span className="badge-red">Fallecido</span>}
+            {animal.animal_status === 'extraviado' && <span className="badge-yellow">Extraviado</span>}
+            {animal.location === 'hogar_definitivo' && <span className="badge-blue">Adoptado</span>}
           </div>
           <p className="text-sm text-gray-500 mt-0.5">
             {animal.breed || 'Sin raza'} · {getAge(animal.birth_date, animal.estimated_age_years)}
-            {animal.registration_number && ` · Reg: ${animal.registration_number}`}
-            {animal.tattoo_number && ` · Tatuaje: ${animal.tattoo_number}`}
+            {animal.location && ` · ${LOCATION_LABELS[animal.location] || animal.location}`}
+            {animal.chip_number && ` · Chip: ${animal.chip_number}`}
           </p>
         </div>
+        <button
+          onClick={generatePDF}
+          className="btn-secondary flex items-center gap-2 flex-shrink-0"
+          title="Imprimir ficha médica"
+        >
+          <Printer size={16} />
+          <span className="hidden sm:inline">Imprimir ficha</span>
+        </button>
       </div>
 
       {/* Tabs */}
@@ -390,9 +553,15 @@ export default function AnimalDetalle() {
                   ['Sexo', animal.sex],
                   ['Raza', animal.breed || '—'],
                   ['Color', animal.color || '—'],
+                  ['Pelaje', animal.coat || '—'],
                   ['Fecha nac.', fmtDate(animal.birth_date)],
                   ['Edad', getAge(animal.birth_date, animal.estimated_age_years)],
                   ['Peso actual', animal.current_weight_kg ? `${animal.current_weight_kg} kg` : '—'],
+                  ['Estado', STATUS_LABELS[animal.animal_status] || animal.animal_status || '—'],
+                  ['Ubicación', LOCATION_LABELS[animal.location] || animal.location || '—'],
+                  ['Fecha ingreso', fmtDate(animal.entry_date)],
+                  ['Fecha NexGard', fmtDate(animal.nextgard_date)],
+                  ['N° Reconocimiento', animal.recognition_number || '—'],
                   ['N° Registro', animal.registration_number || '—'],
                   ['N° Chip', animal.chip_number || '—'],
                   ['N° Tatuaje', animal.tattoo_number || '—'],
@@ -626,6 +795,70 @@ export default function AnimalDetalle() {
         </div>
       )}
 
+      {/* ─── TAB: ADOPCIÓN ─── */}
+      {tab === 'adopcion' && (
+        <div className="space-y-5">
+          {/* Status banner */}
+          {animal.location === 'hogar_definitivo' ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 flex items-center gap-3">
+              <Heart size={18} className="text-blue-500 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-blue-800 text-sm">Este animal fue adoptado</p>
+                {adoptions[0] && <p className="text-blue-700 text-sm">Adoptado por {adoptions[0].adopter_name} el {fmtDate(adoptions[0].adoption_date)}</p>}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Heart size={18} className="text-amber-500 flex-shrink-0" />
+                <p className="text-amber-800 text-sm font-medium">Sin adopción registrada</p>
+              </div>
+              <button onClick={() => setModal('adopcion')} className="btn-primary flex-shrink-0">
+                <Plus size={14} /> Registrar adopción
+              </button>
+            </div>
+          )}
+
+          {/* Adoption history */}
+          {adoptions.length > 0 && (
+            <div className="card">
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h2 className="font-semibold text-gray-900 flex items-center gap-2"><Heart size={16} className="text-blue-600" /> Historial de adopciones</h2>
+                <button onClick={() => setModal('adopcion')} className="btn-primary"><Plus size={14} /> Nueva</button>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {adoptions.map(ad => (
+                  <div key={ad.id} className="px-5 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-gray-900">{ad.adopter_name}</span>
+                          <span className="badge-blue">{fmtDate(ad.adoption_date)}</span>
+                        </div>
+                        {ad.adopter_address && <p className="text-sm text-gray-500">📍 {ad.adopter_address}</p>}
+                        {ad.adopter_phone && <p className="text-sm text-gray-500">📞 {ad.adopter_phone}</p>}
+                        {ad.notes && <p className="text-sm text-gray-600 mt-2 bg-gray-50 rounded-lg px-3 py-2">{ad.notes}</p>}
+                      </div>
+                      <button onClick={() => generatePDF()} className="btn-secondary flex items-center gap-1.5 flex-shrink-0 text-sm" title="Imprimir ficha de adopción">
+                        <Printer size={14} /> Imprimir ficha
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {adoptions.length === 0 && animal.location !== 'hogar_definitivo' && (
+            <div className="card p-10 text-center">
+              <Heart size={32} className="text-gray-200 mx-auto mb-3" />
+              <p className="text-gray-400 text-sm">Registrá la adopción cuando el animal encuentre su hogar definitivo.</p>
+              <p className="text-gray-400 text-xs mt-1">Se actualizará automáticamente el estado del animal.</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ─── TAB: ECONÓMICO ─── */}
       {tab === 'economico' && (
         <div className="space-y-5">
@@ -844,6 +1077,62 @@ export default function AnimalDetalle() {
       </Modal>
       <Modal open={modal === 'peso'} onClose={() => setModal(null)} title="Registrar peso" size="sm">
         <WeightForm onSave={savePeso} onClose={() => setModal(null)} />
+      </Modal>
+
+      <Modal open={modal === 'adopcion'} onClose={() => setModal(null)} title="Registrar adopción" size="md">
+        <form onSubmit={saveAdoption} className="space-y-4">
+          <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm text-blue-800">
+            Al registrar la adopción, el animal pasará automáticamente a <strong>Hogar definitivo</strong>.
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <label className="label">Nombre del adoptante *</label>
+              <input
+                type="text" className="input" required
+                value={adoptionForm.adopter_name}
+                onChange={e => setAdoptionForm({ ...adoptionForm, adopter_name: e.target.value })}
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="label">Dirección</label>
+              <input
+                type="text" className="input"
+                value={adoptionForm.adopter_address}
+                onChange={e => setAdoptionForm({ ...adoptionForm, adopter_address: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label">Teléfono</label>
+              <input
+                type="text" className="input"
+                value={adoptionForm.adopter_phone}
+                onChange={e => setAdoptionForm({ ...adoptionForm, adopter_phone: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label">Fecha de adopción *</label>
+              <input
+                type="date" className="input" required
+                value={adoptionForm.adoption_date}
+                onChange={e => setAdoptionForm({ ...adoptionForm, adoption_date: e.target.value })}
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="label">Notas</label>
+              <textarea
+                className="input resize-none" rows={3}
+                value={adoptionForm.notes}
+                onChange={e => setAdoptionForm({ ...adoptionForm, notes: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={() => setModal(null)} className="btn-secondary flex-1">Cancelar</button>
+            <button type="submit" disabled={savingAdoption} className="btn-primary flex-1 justify-center">
+              {savingAdoption ? 'Guardando...' : '❤️ Confirmar adopción'}
+            </button>
+          </div>
+        </form>
       </Modal>
     </div>
   )

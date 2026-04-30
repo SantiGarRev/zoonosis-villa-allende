@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard, Dog, Bell, LogOut, Menu, X, ChevronRight, User
+  LayoutDashboard, Dog, Bell, Heart, LogOut, Menu, X, ChevronRight, User
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const navItems = [
-  { to: '/',           icon: LayoutDashboard, label: 'Dashboard'     },
-  { to: '/animales',   icon: Dog,             label: 'Animales'      },
-  { to: '/recordatorios', icon: Bell,         label: 'Recordatorios' },
+  { to: '/',              icon: LayoutDashboard, label: 'Dashboard'     },
+  { to: '/animales',      icon: Dog,             label: 'Animales'      },
+  { to: '/adopciones',    icon: Heart,           label: 'Adopciones'    },
+  { to: '/recordatorios', icon: Bell,            label: 'Recordatorios' },
 ]
 
 export default function Layout({ children }) {

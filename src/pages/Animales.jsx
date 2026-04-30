@@ -10,8 +10,10 @@ const SEX_OPTIONS = ['macho', 'hembra']
 
 const emptyForm = {
   name: '', species: 'perro', sex: 'macho', breed: '', birth_date: '',
-  estimated_age_years: '', color: '', registration_number: '', chip_number: '',
-  tattoo_number: '', is_neutered: false, neutering_date: '', current_weight_kg: '', notes: ''
+  estimated_age_years: '', color: '', coat: '', registration_number: '', recognition_number: '',
+  chip_number: '', tattoo_number: '', is_neutered: false, neutering_date: '',
+  current_weight_kg: '', animal_status: 'vivo', location: 'refugio',
+  entry_date: new Date().toISOString().split('T')[0], nextgard_date: '', notes: ''
 }
 
 export default function Animales() {
@@ -53,6 +55,8 @@ export default function Animales() {
         ...form,
         birth_date: form.birth_date || null,
         neutering_date: form.neutering_date || null,
+        nextgard_date: form.nextgard_date || null,
+        entry_date: form.entry_date || null,
         estimated_age_years: form.estimated_age_years ? parseInt(form.estimated_age_years) : null,
         current_weight_kg: form.current_weight_kg ? parseFloat(form.current_weight_kg) : null,
         created_by: user.id,
@@ -71,7 +75,8 @@ export default function Animales() {
 
   const filtered = animals.filter(a => {
     const matchSearch = a.name.toLowerCase().includes(search.toLowerCase()) ||
-      (a.registration_number || '').toLowerCase().includes(search.toLowerCase())
+      (a.registration_number || '').toLowerCase().includes(search.toLowerCase()) ||
+      (a.recognition_number || '').toLowerCase().includes(search.toLowerCase())
     const matchFilter = filter === 'todos' || a.species === filter
     return matchSearch && matchFilter
   })
@@ -141,15 +146,19 @@ export default function Animales() {
                 {a.species === 'perro' ? '🐕' : a.species === 'gato' ? '🐈' : '🐾'}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-gray-900">{a.name}</span>
+                  {a.recognition_number && <span className="badge-gray font-mono text-xs">{a.recognition_number}</span>}
                   {a.is_neutered && <span className="badge-green">Castrado/a</span>}
                   <span className="badge-gray capitalize">{a.sex}</span>
+                  {a.animal_status === 'fallecido' && <span className="badge-red">Fallecido</span>}
+                  {a.animal_status === 'extraviado' && <span className="badge-yellow">Extraviado</span>}
+                  {a.location === 'hogar_definitivo' && <span className="badge-blue">Adoptado</span>}
                 </div>
                 <p className="text-xs text-gray-500 mt-0.5">
                   {a.breed || 'Raza no especificada'}
+                  {a.location && ` · ${a.location.replace('_', ' ')}`}
                   {a.registration_number && ` · Reg: ${a.registration_number}`}
-                  {a.tattoo_number && ` · Tatuaje: ${a.tattoo_number}`}
                   {a.current_weight_kg && ` · ${a.current_weight_kg} kg`}
                 </p>
               </div>
@@ -168,7 +177,12 @@ export default function Animales() {
         )}
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
+            {/* Identificación */}
+            <div>
+              <label className="label">N° de reconocimiento</label>
+              <input type="text" className="input font-mono" placeholder="00-01" value={form.recognition_number} onChange={e => setForm({ ...form, recognition_number: e.target.value })} />
+            </div>
+            <div>
               <label className="label">Nombre *</label>
               <input type="text" className="input" required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
             </div>
@@ -192,6 +206,10 @@ export default function Animales() {
               <label className="label">Color</label>
               <input type="text" className="input" value={form.color} onChange={e => setForm({ ...form, color: e.target.value })} />
             </div>
+            <div className="col-span-2">
+              <label className="label">Pelaje (descripción)</label>
+              <input type="text" className="input" placeholder="Ej: Marrón claro - corto" value={form.coat} onChange={e => setForm({ ...form, coat: e.target.value })} />
+            </div>
             <div>
               <label className="label">Fecha de nacimiento</label>
               <input type="date" className="input" value={form.birth_date} onChange={e => setForm({ ...form, birth_date: e.target.value })} />
@@ -201,7 +219,33 @@ export default function Animales() {
               <input type="number" className="input" min="0" max="30" value={form.estimated_age_years} onChange={e => setForm({ ...form, estimated_age_years: e.target.value })} />
             </div>
             <div>
-              <label className="label">N° de registro</label>
+              <label className="label">Fecha de ingreso</label>
+              <input type="date" className="input" value={form.entry_date} onChange={e => setForm({ ...form, entry_date: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Peso actual (kg)</label>
+              <input type="number" step="0.1" className="input" value={form.current_weight_kg} onChange={e => setForm({ ...form, current_weight_kg: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Estado</label>
+              <select className="input" value={form.animal_status} onChange={e => setForm({ ...form, animal_status: e.target.value })}>
+                <option value="vivo">Vivo</option>
+                <option value="fallecido">Fallecido</option>
+                <option value="extraviado">Extraviado</option>
+                <option value="recuperado">Recuperado por dueños</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Lugar</label>
+              <select className="input" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })}>
+                <option value="refugio">Refugio canino</option>
+                <option value="hogar_definitivo">Hogar definitivo</option>
+                <option value="bionodo">Bionodo</option>
+                <option value="provisorio">Provisorio</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">N° de reconocimiento</label>
               <input type="text" className="input" value={form.registration_number} onChange={e => setForm({ ...form, registration_number: e.target.value })} />
             </div>
             <div>
@@ -213,8 +257,8 @@ export default function Animales() {
               <input type="text" className="input" value={form.tattoo_number} onChange={e => setForm({ ...form, tattoo_number: e.target.value })} />
             </div>
             <div>
-              <label className="label">Peso actual (kg)</label>
-              <input type="number" step="0.1" className="input" value={form.current_weight_kg} onChange={e => setForm({ ...form, current_weight_kg: e.target.value })} />
+              <label className="label">Fecha NexGard</label>
+              <input type="date" className="input" value={form.nextgard_date} onChange={e => setForm({ ...form, nextgard_date: e.target.value })} />
             </div>
             <div className="col-span-2 flex items-center gap-3">
               <input

@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import Animales from './pages/Animales'
 import AnimalDetalle from './pages/AnimalDetalle'
 import Recordatorios from './pages/Recordatorios'
+import Adopciones from './pages/Adopciones'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -53,6 +54,13 @@ function AppRoutes() {
         <ProtectedRoute>
           <Layout>
             <Recordatorios />
+          </Layout>
+        </ProtectedRoute>
+      } />
+      <Route path="/adopciones" element={
+        <ProtectedRoute>
+          <Layout>
+            <Adopciones />
           </Layout>
         </ProtectedRoute>
       } />
