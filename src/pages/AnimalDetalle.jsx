@@ -10,7 +10,7 @@ import { es } from 'date-fns/locale'
 import {
   ArrowLeft, Edit, Syringe, Bug, FlaskConical, Stethoscope,
   DollarSign, BarChart3, Plus, Trash2, AlertCircle, CheckCircle,
-  Weight, Calendar, Hash, PawPrint, ClipboardList, TrendingUp, Heart, Printer
+  Weight, Calendar, Hash, PawPrint, ClipboardList, TrendingUp, Heart, Printer, Save, X
 } from 'lucide-react'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -55,12 +55,13 @@ const COLORS = ['#15803d', '#d97706', '#2563eb', '#9333ea', '#e11d48']
 function fmtDate(d) { return d ? format(parseISO(d), 'dd/MM/yyyy') : '—' }
 function fmtMoney(n) { return n != null ? `$${Number(n).toLocaleString('es-AR')}` : '—' }
 
-function getAge(birth_date, estimated_age_years) {
+function getAge(birth_date, estimated_age_years, estimated_age_months) {
   if (birth_date) {
     const years = differenceInYears(new Date(), parseISO(birth_date))
     const months = differenceInMonths(new Date(), parseISO(birth_date)) % 12
     return years > 0 ? `${years} año${years !== 1 ? 's' : ''} ${months > 0 ? `${months}m` : ''}` : `${months} meses`
   }
+  if (estimated_age_months) return `~${estimated_age_months} meses (estimado)`
   if (estimated_age_years) return `~${estimated_age_years} años (estimado)`
   return 'No especificada'
 }
@@ -192,6 +193,105 @@ export default function AnimalDetalle() {
   const [adoptions, setAdoptions] = useState([])
   const [adoptionForm, setAdoptionForm] = useState({ adopter_name: '', adopter_address: '', adopter_phone: '', adoption_date: new Date().toISOString().split('T')[0], notes: '' })
   const [savingAdoption, setSavingAdoption] = useState(false)
+
+  // Edit animal
+  const [editForm, setEditForm] = useState(null)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editError, setEditError] = useState('')
+
+  function openEdit() {
+    setEditForm({
+      name: animal.name || '',
+      species: animal.species || 'perro',
+      sex: animal.sex || 'macho',
+      breed: animal.breed || '',
+      birth_date: animal.birth_date || '',
+      estimated_age_years: animal.estimated_age_years || '',
+      color: animal.color || '',
+      coat: animal.coat || '',
+      registration_number: animal.registration_number || '',
+      recognition_number: animal.recognition_number || '',
+      chip_number: animal.chip_number || '',
+      tattoo_number: animal.tattoo_number || '',
+      is_neutered: animal.is_neutered || false,
+      neutering_date: animal.neutering_date || '',
+      current_weight_kg: animal.current_weight_kg || '',
+      animal_status: animal.animal_status || 'vivo',
+      location: animal.location || 'refugio',
+      entry_date: animal.entry_date || '',
+      nextgard_date: animal.nextgard_date || '',
+      notes: animal.notes || '',
+    })
+    setEditError('')
+    setModal('edit')
+  }
+
+  async function saveEdit(e) {
+    e.preventDefault()
+    setEditError('')
+    setSavingEdit(true)
+    try {
+      const payload = {
+        ...editForm,
+        birth_date: editForm.birth_date || null,
+        neutering_date: editForm.neutering_date || null,
+        nextgard_date: editForm.nextgard_date || null,
+        entry_date: editForm.entry_date || null,
+        estimated_age_years: editForm.estimated_age_years ? parseInt(editForm.estimated_age_years) : null,
+        current_weight_kg: editForm.current_weight_kg ? parseFloat(editForm.current_weight_kg) : null,
+      }
+      const { error } = await supabase.from('animals').update(payload).eq('id', id)
+      if (error) throw error
+      setModal(null)
+      loadAll()
+    } catch (err) {
+      setEditError(err.message)
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  async function deleteAnimal() {
+    if (!confirm(`¿Eliminar a ${animal.name}? Esta acción no se puede deshacer.`)) return
+    await supabase.from('animals').update({ is_active: false }).eq('id', id)
+    navigate('/animales')
+  }
+
+  // Quick actions
+  const [neuterForm, setNeuterForm] = useState({ neutering_date: new Date().toISOString().split('T')[0], tattoo_number: '' })
+  const [savingNeuter, setSavingNeuter] = useState(false)
+  const [locationForm, setLocationForm] = useState('')
+
+  async function saveNeuter(e) {
+    e.preventDefault()
+    setSavingNeuter(true)
+    await supabase.from('animals').update({
+      is_neutered: true,
+      neutering_date: neuterForm.neutering_date || null,
+      tattoo_number: neuterForm.tattoo_number || animal.tattoo_number || null,
+    }).eq('id', id)
+    setModal(null)
+    loadAll()
+    setSavingNeuter(false)
+  }
+
+  async function saveLocation(e) {
+    e.preventDefault()
+    await supabase.from('animals').update({ location: locationForm }).eq('id', id)
+    setModal(null)
+    loadAll()
+  }
+
+  async function marcarFallecido() {
+    if (!confirm(`¿Marcar a ${animal.name} como fallecido?`)) return
+    await supabase.from('animals').update({ animal_status: 'fallecido' }).eq('id', id)
+    loadAll()
+  }
+
+  async function marcarVivo() {
+    await supabase.from('animals').update({ animal_status: 'vivo' }).eq('id', id)
+    loadAll()
+  }
 
   const loadAll = useCallback(async () => {
     const [animalRes, vacRes, dewRes, studRes, intRes, remRes, weightRes, adoptRes] = await Promise.all([
@@ -480,19 +580,36 @@ export default function AnimalDetalle() {
             {animal.location === 'hogar_definitivo' && <span className="badge-blue">Adoptado</span>}
           </div>
           <p className="text-sm text-gray-500 mt-0.5">
-            {animal.breed || 'Sin raza'} · {getAge(animal.birth_date, animal.estimated_age_years)}
+            {animal.breed || 'Sin raza'} · {getAge(animal.birth_date, animal.estimated_age_years, animal.estimated_age_months)}
             {animal.location && ` · ${LOCATION_LABELS[animal.location] || animal.location}`}
             {animal.chip_number && ` · Chip: ${animal.chip_number}`}
           </p>
         </div>
-        <button
-          onClick={generatePDF}
-          className="btn-secondary flex items-center gap-2 flex-shrink-0"
-          title="Imprimir ficha médica"
-        >
-          <Printer size={16} />
-          <span className="hidden sm:inline">Imprimir ficha</span>
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={generatePDF}
+            className="btn-secondary flex items-center gap-2"
+            title="Imprimir ficha médica"
+          >
+            <Printer size={16} />
+            <span className="hidden sm:inline">Imprimir</span>
+          </button>
+          <button
+            onClick={openEdit}
+            className="btn-secondary flex items-center gap-2"
+            title="Editar datos del animal"
+          >
+            <Edit size={16} />
+            <span className="hidden sm:inline">Editar</span>
+          </button>
+          <button
+            onClick={deleteAnimal}
+            className="p-2 rounded-lg border border-red-200 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+            title="Eliminar animal"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -543,6 +660,42 @@ export default function AnimalDetalle() {
             ))}
           </div>
 
+          {/* Acciones rápidas */}
+          <div className="card p-4">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Acciones rápidas</h3>
+            <div className="flex flex-wrap gap-2">
+              {!animal.is_neutered && (
+                <button
+                  onClick={() => { setNeuterForm({ neutering_date: new Date().toISOString().split('T')[0], tattoo_number: '' }); setModal('castrar') }}
+                  className="btn-secondary text-sm flex items-center gap-1.5"
+                >
+                  ✂️ Registrar castración
+                </button>
+              )}
+              <button
+                onClick={() => { setLocationForm(animal.location || 'refugio'); setModal('ubicacion') }}
+                className="btn-secondary text-sm flex items-center gap-1.5"
+              >
+                📍 Cambiar ubicación
+              </button>
+              {animal.animal_status !== 'fallecido' ? (
+                <button
+                  onClick={marcarFallecido}
+                  className="px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 text-sm transition-colors"
+                >
+                  🕊 Marcar como fallecido
+                </button>
+              ) : (
+                <button
+                  onClick={marcarVivo}
+                  className="px-3 py-1.5 rounded-lg border border-green-200 text-green-600 hover:bg-green-50 text-sm transition-colors"
+                >
+                  ✅ Marcar como vivo
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Info card */}
           <div className="grid md:grid-cols-2 gap-4">
             <div className="card p-5">
@@ -555,7 +708,7 @@ export default function AnimalDetalle() {
                   ['Color', animal.color || '—'],
                   ['Pelaje', animal.coat || '—'],
                   ['Fecha nac.', fmtDate(animal.birth_date)],
-                  ['Edad', getAge(animal.birth_date, animal.estimated_age_years)],
+                  ['Edad', getAge(animal.birth_date, animal.estimated_age_years, animal.estimated_age_months)],
                   ['Peso actual', animal.current_weight_kg ? `${animal.current_weight_kg} kg` : '—'],
                   ['Estado', STATUS_LABELS[animal.animal_status] || animal.animal_status || '—'],
                   ['Ubicación', LOCATION_LABELS[animal.location] || animal.location || '—'],
@@ -1050,7 +1203,7 @@ export default function AnimalDetalle() {
                 ['Castrado/a', animal.is_neutered ? 'Sí' : 'No'],
                 ['Fecha castración', fmtDate(animal.neutering_date)],
                 ['N° tatuaje', animal.tattoo_number || '—'],
-                ['Edad', getAge(animal.birth_date, animal.estimated_age_years)],
+                ['Edad', getAge(animal.birth_date, animal.estimated_age_years, animal.estimated_age_months)],
               ].map(([k, v]) => (
                 <div key={k} className="bg-gray-50 rounded-lg p-3">
                   <p className="text-xs text-gray-400">{k}</p>
@@ -1077,6 +1230,177 @@ export default function AnimalDetalle() {
       </Modal>
       <Modal open={modal === 'peso'} onClose={() => setModal(null)} title="Registrar peso" size="sm">
         <WeightForm onSave={savePeso} onClose={() => setModal(null)} />
+      </Modal>
+
+      {/* ─── CASTRAR MODAL ─── */}
+      <Modal open={modal === 'castrar'} onClose={() => setModal(null)} title="Registrar castración" size="sm">
+        <form onSubmit={saveNeuter} className="space-y-4">
+          <div>
+            <label className="label">Fecha de castración *</label>
+            <input type="date" className="input" required value={neuterForm.neutering_date}
+              onChange={e => setNeuterForm({ ...neuterForm, neutering_date: e.target.value })} />
+          </div>
+          <div>
+            <label className="label">N° tatuaje (opcional)</label>
+            <input type="text" className="input" value={neuterForm.tattoo_number}
+              onChange={e => setNeuterForm({ ...neuterForm, tattoo_number: e.target.value })}
+              placeholder="Número de tatuaje de castración" />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={() => setModal(null)} className="btn-secondary flex-1">Cancelar</button>
+            <button type="submit" disabled={savingNeuter} className="btn-primary flex-1 justify-center">
+              {savingNeuter ? 'Guardando...' : '✂️ Confirmar castración'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ─── UBICACIÓN MODAL ─── */}
+      <Modal open={modal === 'ubicacion'} onClose={() => setModal(null)} title="Cambiar ubicación" size="sm">
+        <form onSubmit={saveLocation} className="space-y-4">
+          <div>
+            <label className="label">Ubicación actual</label>
+            <select className="input" value={locationForm} onChange={e => setLocationForm(e.target.value)}>
+              <option value="refugio">Refugio canino</option>
+              <option value="bionodo">Bionodo</option>
+              <option value="provisorio">Provisorio</option>
+              <option value="hogar_definitivo">Hogar definitivo (adoptado)</option>
+            </select>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={() => setModal(null)} className="btn-secondary flex-1">Cancelar</button>
+            <button type="submit" className="btn-primary flex-1 justify-center">📍 Guardar ubicación</button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ─── EDIT ANIMAL MODAL ─── */}
+      <Modal open={modal === 'edit'} onClose={() => setModal(null)} title="Editar animal" size="lg">
+        {editForm && (
+          <>
+            {editError && (
+              <div className="mb-4 flex items-center gap-2 text-red-600 bg-red-50 px-3 py-2 rounded-lg text-sm">
+                <AlertCircle size={14} /> {editError}
+              </div>
+            )}
+            <form onSubmit={saveEdit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">N° de reconocimiento</label>
+                  <input type="text" className="input font-mono" value={editForm.recognition_number} onChange={e => setEditForm({ ...editForm, recognition_number: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Nombre *</label>
+                  <input type="text" className="input" required value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Especie</label>
+                  <select className="input" value={editForm.species} onChange={e => setEditForm({ ...editForm, species: e.target.value })}>
+                    <option value="perro">Perro</option>
+                    <option value="gato">Gato</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Sexo</label>
+                  <select className="input" value={editForm.sex} onChange={e => setEditForm({ ...editForm, sex: e.target.value })}>
+                    <option value="macho">Macho</option>
+                    <option value="hembra">Hembra</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Raza</label>
+                  <input type="text" className="input" value={editForm.breed} onChange={e => setEditForm({ ...editForm, breed: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Color</label>
+                  <input type="text" className="input" value={editForm.color} onChange={e => setEditForm({ ...editForm, color: e.target.value })} />
+                </div>
+                <div className="col-span-2">
+                  <label className="label">Pelaje</label>
+                  <input type="text" className="input" value={editForm.coat} onChange={e => setEditForm({ ...editForm, coat: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Fecha de nacimiento</label>
+                  <input type="date" className="input" value={editForm.birth_date} onChange={e => setEditForm({ ...editForm, birth_date: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Edad estimada (años)</label>
+                  <input type="number" className="input" min="0" max="30" value={editForm.estimated_age_years} onChange={e => setEditForm({ ...editForm, estimated_age_years: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Fecha de ingreso</label>
+                  <input type="date" className="input" value={editForm.entry_date} onChange={e => setEditForm({ ...editForm, entry_date: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Peso actual (kg)</label>
+                  <input type="number" step="0.1" className="input" value={editForm.current_weight_kg} onChange={e => setEditForm({ ...editForm, current_weight_kg: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Estado</label>
+                  <select className="input" value={editForm.animal_status} onChange={e => setEditForm({ ...editForm, animal_status: e.target.value })}>
+                    <option value="vivo">Vivo</option>
+                    <option value="fallecido">Fallecido</option>
+                    <option value="extraviado">Extraviado</option>
+                    <option value="recuperado">Recuperado por dueños</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Lugar</label>
+                  <select className="input" value={editForm.location} onChange={e => setEditForm({ ...editForm, location: e.target.value })}>
+                    <option value="refugio">Refugio canino</option>
+                    <option value="hogar_definitivo">Hogar definitivo</option>
+                    <option value="bionodo">Bionodo</option>
+                    <option value="provisorio">Provisorio</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label">N° de registro</label>
+                  <input type="text" className="input" value={editForm.registration_number} onChange={e => setEditForm({ ...editForm, registration_number: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">N° de chip</label>
+                  <input type="text" className="input" value={editForm.chip_number} onChange={e => setEditForm({ ...editForm, chip_number: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">N° tatuaje (castración)</label>
+                  <input type="text" className="input" value={editForm.tattoo_number} onChange={e => setEditForm({ ...editForm, tattoo_number: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Fecha NexGard</label>
+                  <input type="date" className="input" value={editForm.nextgard_date} onChange={e => setEditForm({ ...editForm, nextgard_date: e.target.value })} />
+                </div>
+                <div className="col-span-2 flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="edit-neutered"
+                    checked={editForm.is_neutered}
+                    onChange={e => setEditForm({ ...editForm, is_neutered: e.target.checked })}
+                    className="rounded border-gray-300 text-forest-700 focus:ring-forest-700"
+                  />
+                  <label htmlFor="edit-neutered" className="text-sm font-medium text-gray-700">Castrado/a</label>
+                  {editForm.is_neutered && (
+                    <input
+                      type="date" className="input flex-1"
+                      value={editForm.neutering_date}
+                      onChange={e => setEditForm({ ...editForm, neutering_date: e.target.value })}
+                    />
+                  )}
+                </div>
+                <div className="col-span-2">
+                  <label className="label">Notas</label>
+                  <textarea className="input resize-none" rows={3} value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setModal(null)} className="btn-secondary flex-1">Cancelar</button>
+                <button type="submit" disabled={savingEdit} className="btn-primary flex-1 justify-center">
+                  {savingEdit ? 'Guardando...' : 'Guardar cambios'}
+                </button>
+              </div>
+            </form>
+          </>
+        )}
       </Modal>
 
       <Modal open={modal === 'adopcion'} onClose={() => setModal(null)} title="Registrar adopción" size="md">

@@ -13,7 +13,7 @@ function fmtMoney(n) { return n != null ? `$${Math.round(n).toLocaleString('es-A
 
 export default function Dashboard() {
   const { profile } = useAuth()
-  const [stats, setStats] = useState({ animals: 0, dogs: 0, cats: 0, neutered: 0, adopted: 0 })
+  const [stats, setStats] = useState({ animals: 0, dogs: 0, cats: 0, neutered: 0, adopted: 0, fallecidos: 0, en_refugio: 0 })
   const [costs, setCosts] = useState({ vacunas: 0, desparasitaciones: 0, estudios: 0, intervenciones: 0 })
   const [costByMonth, setCostByMonth] = useState([])
   const [reminders, setReminders] = useState([])
@@ -54,6 +54,8 @@ export default function Dashboard() {
       cats: animals.filter(a => a.species === 'gato').length,
       neutered: animals.filter(a => a.is_neutered).length,
       adopted: animals.filter(a => a.location === 'hogar_definitivo').length,
+      fallecidos: animals.filter(a => a.animal_status === 'fallecido').length,
+      en_refugio: animals.filter(a => a.location === 'refugio' && a.animal_status !== 'fallecido').length,
     })
 
     // Aggregate costs
@@ -147,13 +149,12 @@ export default function Dashboard() {
       )}
 
       {/* Animal stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Total animales', value: stats.animals, icon: Dog, color: 'text-forest-700', bg: 'bg-forest-50' },
+          { label: 'Total activos', value: stats.animals, icon: Dog, color: 'text-forest-700', bg: 'bg-forest-50' },
           { label: 'Perros', value: stats.dogs, icon: Dog, color: 'text-blue-600', bg: 'bg-blue-50' },
           { label: 'Gatos', value: stats.cats, icon: Activity, color: 'text-purple-600', bg: 'bg-purple-50' },
           { label: 'Castrados', value: stats.neutered, icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50' },
-          { label: 'Adoptados', value: stats.adopted, icon: Heart, color: 'text-pink-600', bg: 'bg-pink-50' },
         ].map(({ label, value, icon: Icon, color, bg }) => (
           <div key={label} className="card p-4">
             <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center mb-3`}>
@@ -163,6 +164,22 @@ export default function Dashboard() {
             <p className="text-xs text-gray-500 mt-0.5">{label}</p>
           </div>
         ))}
+      </div>
+
+      {/* Estado breakdown */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="card p-4 border-l-4 border-green-400">
+          <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1">En refugio / activos</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.en_refugio}</p>
+        </div>
+        <div className="card p-4 border-l-4 border-blue-400">
+          <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1">Adoptados</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.adopted}</p>
+        </div>
+        <div className="card p-4 border-l-4 border-gray-400">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Fallecidos</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.fallecidos}</p>
+        </div>
       </div>
 
       {/* Cost indicators */}

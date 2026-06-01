@@ -26,8 +26,9 @@ export default function Recordatorios() {
   const { user } = useAuth()
   const [reminders, setReminders] = useState([])
   const [animals, setAnimals] = useState([])
+  const [unneuteredAnimals, setUnneuteredAnimals] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('pendiente') // pendiente|completado|todos
+  const [filter, setFilter] = useState('pendiente') // pendiente|completado|todos|castracion
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState({ animal_id: '', type: 'Vacunación', due_date: '', title: '', description: '' })
   const [saving, setSaving] = useState(false)
@@ -36,13 +37,34 @@ export default function Recordatorios() {
 
   async function loadData() {
     setLoading(true)
-    const [remRes, animRes] = await Promise.all([
+    const [remRes, animRes, unneutRes] = await Promise.all([
       supabase.from('reminders').select('*, animals(name, species)').order('due_date', { ascending: true }),
       supabase.from('animals').select('id, name').eq('is_active', true).order('name'),
+      supabase.from('animals')
+        .select('id, name, species, location, animal_status')
+        .eq('is_active', true)
+        .eq('is_neutered', false)
+        .neq('animal_status', 'fallecido')
+        .order('name'),
     ])
     setReminders(remRes.data || [])
     setAnimals(animRes.data || [])
+    setUnneuteredAnimals(unneutRes.data || [])
     setLoading(false)
+  }
+
+  async function createCastrationReminder(animal) {
+    const due = new Date()
+    due.setDate(due.getDate() + 30)
+    await supabase.from('reminders').insert([{
+      animal_id: animal.id,
+      type: 'Cirugía',
+      title: `Castración pendiente: ${animal.name}`,
+      due_date: due.toISOString().split('T')[0],
+      status: 'pendiente',
+      created_by: (await supabase.auth.getUser()).data.user?.id,
+    }])
+    loadData()
   }
 
   async function markDone(id) {
@@ -129,7 +151,7 @@ export default function Recordatorios() {
 
       {/* Filter tabs */}
       <div className="flex gap-1 bg-white border border-gray-200 rounded-lg p-1 w-fit">
-        {[['pendiente', 'Pendientes'], ['completado', 'Completados'], ['todos', 'Todos']].map(([v, l]) => (
+        {[['pendiente', 'Pendientes'], ['completado', 'Completados'], ['todos', 'Todos'], ['castracion', `Sin castrar (${unneuteredAnimals.length})`]].map(([v, l]) => (
           <button
             key={v}
             onClick={() => setFilter(v)}
@@ -145,6 +167,36 @@ export default function Recordatorios() {
       {/* List */}
       {loading ? (
         <div className="card p-10 text-center text-gray-400">Cargando...</div>
+      ) : filter === 'castracion' ? (
+        unneuteredAnimals.length === 0 ? (
+          <div className="card p-10 text-center">
+            <CheckCircle size={32} className="text-green-300 mx-auto mb-3" />
+            <p className="text-gray-400 text-sm">¡Todos los animales están castrados!</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-500">{unneuteredAnimals.length} animal{unneuteredAnimals.length !== 1 ? 'es' : ''} sin castrar. Podés crear un recordatorio para planificar la cirugía.</p>
+            <div className="card divide-y divide-gray-100">
+              {unneuteredAnimals.map(a => (
+                <div key={a.id} className="px-5 py-4 flex items-center gap-4">
+                  <div className="text-xl flex-shrink-0">
+                    {a.species === 'perro' ? '🐕' : a.species === 'gato' ? '🐈' : '🐾'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <Link to={`/animales/${a.id}`} className="font-medium text-sm text-gray-900 hover:text-forest-700">{a.name}</Link>
+                    <p className="text-xs text-gray-500 capitalize">{a.location?.replace('_', ' ') || 'Sin ubicación'}</p>
+                  </div>
+                  <button
+                    onClick={() => createCastrationReminder(a)}
+                    className="btn-secondary text-xs py-1.5 px-3"
+                  >
+                    + Crear recordatorio
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
       ) : filtered.length === 0 ? (
         <div className="card p-10 text-center">
           <Bell size={32} className="text-gray-300 mx-auto mb-3" />

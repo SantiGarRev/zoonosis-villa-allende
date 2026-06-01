@@ -10,7 +10,8 @@ const SEX_OPTIONS = ['macho', 'hembra']
 
 const emptyForm = {
   name: '', species: 'perro', sex: 'macho', breed: '', birth_date: '',
-  estimated_age_years: '', color: '', coat: '', registration_number: '', recognition_number: '',
+  estimated_age_years: '', estimated_age_months: '', color: '', coat: '',
+  registration_number: '', recognition_number: '',
   chip_number: '', tattoo_number: '', is_neutered: false, neutering_date: '',
   current_weight_kg: '', animal_status: 'vivo', location: 'refugio',
   entry_date: new Date().toISOString().split('T')[0], nextgard_date: '', notes: ''
@@ -58,6 +59,7 @@ export default function Animales() {
         nextgard_date: form.nextgard_date || null,
         entry_date: form.entry_date || null,
         estimated_age_years: form.estimated_age_years ? parseInt(form.estimated_age_years) : null,
+        estimated_age_months: form.estimated_age_months ? parseInt(form.estimated_age_months) : null,
         current_weight_kg: form.current_weight_kg ? parseFloat(form.current_weight_kg) : null,
         created_by: user.id,
         is_active: true,
@@ -215,8 +217,12 @@ export default function Animales() {
               <input type="date" className="input" value={form.birth_date} onChange={e => setForm({ ...form, birth_date: e.target.value })} />
             </div>
             <div>
-              <label className="label">Edad estimada (años)</label>
-              <input type="number" className="input" min="0" max="30" value={form.estimated_age_years} onChange={e => setForm({ ...form, estimated_age_years: e.target.value })} />
+              <label className="label">Edad estimada</label>
+              <div className="flex gap-2">
+                <input type="number" className="input flex-1" min="0" max="30" placeholder="Años" value={form.estimated_age_years} onChange={e => setForm({ ...form, estimated_age_years: e.target.value, estimated_age_months: '' })} />
+                <input type="number" className="input flex-1" min="0" max="11" placeholder="Meses (cachorros)" value={form.estimated_age_months} onChange={e => setForm({ ...form, estimated_age_months: e.target.value, estimated_age_years: '' })} />
+              </div>
+              <p className="text-xs text-gray-400 mt-0.5">Completá solo uno: años O meses</p>
             </div>
             <div>
               <label className="label">Fecha de ingreso</label>

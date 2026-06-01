@@ -7,6 +7,7 @@ import Animales from './pages/Animales'
 import AnimalDetalle from './pages/AnimalDetalle'
 import Recordatorios from './pages/Recordatorios'
 import Adopciones from './pages/Adopciones'
+import Informes from './pages/Informes'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -61,6 +62,13 @@ function AppRoutes() {
         <ProtectedRoute>
           <Layout>
             <Adopciones />
+          </Layout>
+        </ProtectedRoute>
+      } />
+      <Route path="/informes" element={
+        <ProtectedRoute>
+          <Layout>
+            <Informes />
           </Layout>
         </ProtectedRoute>
       } />
